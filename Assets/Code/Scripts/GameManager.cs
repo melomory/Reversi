@@ -1,15 +1,12 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 public class GameManager : MonoBehaviour
 {
     [SerializeField]
     private Camera _camera;
-
-    [SerializeField]
-    private LayerMask _boardLayer;
 
     [SerializeField]
     private Disc _discBlackUp;
@@ -20,13 +17,14 @@ public class GameManager : MonoBehaviour
     [SerializeField]
     private GameObject _highlightPrefab;
 
+    [SerializeField]
+    private UIManager _uiManager;
+
     private Dictionary<Player, Disc> _discPrefabs = new();
 
     private GameState _gameState = new();
 
     private Disc[,] _discs = new Disc[8, 8];
-
-    private bool _canMove = true;
 
     private List<GameObject> _highlights = new();
 
@@ -37,6 +35,7 @@ public class GameManager : MonoBehaviour
 
         AddStartDiscs();
         ShowLegalMoves();
+        _uiManager.SetPlayerText(_gameState.CurrentPlayer);
     }
 
     private void Update()
@@ -50,7 +49,7 @@ public class GameManager : MonoBehaviour
         {
             Ray ray = _camera.ScreenPointToRay(Input.mousePosition);
 
-            if (Physics.Raycast(ray, out RaycastHit hitInfo, 100f, _boardLayer))
+            if (Physics.Raycast(ray, out RaycastHit hitInfo))
             {
                 Vector3 impact = hitInfo.point;
                 Position boardPosition = SceneToBoardPosition(impact);
@@ -77,11 +76,6 @@ public class GameManager : MonoBehaviour
 
     private void OnBoardClicked(Position boardPosition)
     {
-        if (!_canMove)
-        {
-            return;
-        }
-
         if (_gameState.MakeMove(boardPosition, out MoveInfo moveInfo))
         {
             StartCoroutine(OnMoveMade(moveInfo));
@@ -90,11 +84,10 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator OnMoveMade(MoveInfo moveInfo)
     {
-        _canMove = false;
         HideLegalMoves();
         yield return ShowMove(moveInfo);
+        yield return ShowTurnOutcome(moveInfo);
         ShowLegalMoves();
-        _canMove = true;
     }
 
     private Position SceneToBoardPosition(Vector3 scenePosition)
@@ -138,5 +131,74 @@ public class GameManager : MonoBehaviour
         yield return new WaitForSeconds(0.33f);
         FlipDiscs(moveInfo.Outflanked);
         yield return new WaitForSeconds(0.83f);
+    }
+
+    private IEnumerator ShowTurnSkipped(Player skippedPlayer)
+    {
+        _uiManager.SetSkippedText(skippedPlayer);
+        yield return _uiManager.AnimateTopText();
+    }
+
+    private IEnumerator ShowGameOver(Player winner)
+    {
+        _uiManager.SetTopText("Neither Player Can Move");
+        yield return _uiManager.AnimateTopText();
+        yield return _uiManager.ShowScoreText();
+        yield return new WaitForSeconds(0.5f);
+        yield return ShowCounting();
+        _uiManager.SetWinnerText(winner);
+        yield return _uiManager.ShowEndScreen();
+    }
+
+    private IEnumerator ShowTurnOutcome(MoveInfo moveInfo)
+    {
+        if (_gameState.GameOver)
+        {
+            yield return ShowGameOver(_gameState.Winner);
+            yield break;
+        }
+        Player currentPlayer = _gameState.CurrentPlayer;
+        if (currentPlayer == moveInfo.Player)
+        {
+            yield return ShowTurnSkipped(currentPlayer.Opponent());
+        }
+
+        _uiManager.SetPlayerText(currentPlayer);
+    }
+
+    private IEnumerator ShowCounting()
+    {
+        int black = 0;
+        int white = 0;
+
+        foreach (var position in _gameState.OccupiedPositions())
+        {
+            var player = _gameState.Board[position.Row, position.Column];
+
+            if (player == Player.Black)
+            {
+                black++;
+                _uiManager.SetBlackScoreText(black);
+            }
+            else //if (player == Player.White)
+            {
+                white++;
+                _uiManager.SetWhiteScoreText(white);
+            }
+            _discs[position.Row, position.Column].Twitch();
+            yield return new WaitForSeconds(0.05f);
+        }
+    }
+
+    private IEnumerator RestartGame()
+    {
+        yield return _uiManager.HideEndScreen();
+        Scene activeScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(activeScene.name);
+    }
+
+    public void OnPlayAgainClicked()
+    {
+        StartCoroutine(RestartGame());
     }
 }
