@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using System.Linq;
 
 public class GameManager : MonoBehaviour
 {
@@ -28,14 +29,15 @@ public class GameManager : MonoBehaviour
 
     private List<GameObject> _highlights = new();
 
+    private IAI _ai; 
+
     private void Start()
     {
         _discPrefabs[Player.Black] = _discBlackUp;
         _discPrefabs[Player.White] = _discWhiteUp;
 
-        AddStartDiscs();
-        ShowLegalMoves();
-        _uiManager.SetPlayerText(_gameState.CurrentPlayer);
+        _uiManager.ShowStartScreen();
+        _ai = new AIMiniMax(new Heuristic(), 4, _gameState);
     }
 
     private void Update()
@@ -45,22 +47,47 @@ public class GameManager : MonoBehaviour
             Application.Quit();
         }
 
-        if (Input.GetMouseButtonDown(0))
+        if (!_gameState.PlayerIsAI)
         {
-            Ray ray = _camera.ScreenPointToRay(Input.mousePosition);
-
-            if (Physics.Raycast(ray, out RaycastHit hitInfo))
+            if (Input.GetMouseButtonDown(0))
             {
-                Vector3 impact = hitInfo.point;
-                Position boardPosition = SceneToBoardPosition(impact);
-                OnBoardClicked(boardPosition);
+                Ray ray = _camera.ScreenPointToRay(Input.mousePosition);
+
+                if (Physics.Raycast(ray, out RaycastHit hitInfo))
+                {
+                    Vector3 impact = hitInfo.point;
+                    Position boardPosition = SceneToBoardPosition(impact);
+                    OnBoardClicked(boardPosition);
+                    _gameState.PlayerAIMoved = false;
+                }
             }
+            print($"PlayerMove PlayerIsAI:{_gameState.PlayerIsAI} PlayerAIMoved: {_gameState.PlayerAIMoved}");
+        }
+
+        if (_gameState.PlayerIsAI && !_gameState.PlayerAIMoved)
+        {
+
+            StartCoroutine(AIMove());
+            _gameState.PlayerAIMoved = true;
+
+        }
+    }
+
+    private IEnumerator AIMove()
+    {
+        yield return new WaitForSeconds(2.0f);
+        var keysCount = _gameState.BoardState.LegalMoves.Keys.Count();
+        Position pos = new(-1, -1);
+        if (keysCount > 0)
+        {
+            pos = _ai.GetMove(_gameState.BoardState, _gameState.CurrentPlayer);
+            OnBoardClicked(pos);
         }
     }
 
     private void ShowLegalMoves()
     {
-        foreach (var boardPosition in _gameState.LegalMoves.Keys)
+        foreach (var boardPosition in _gameState.BoardState.LegalMoves.Keys)
         {
             Vector3 scenePosition = BoardToScenePosition(boardPosition) + Vector3.up * 0.01f;
             var highlight = Instantiate(_highlightPrefab, scenePosition, Quaternion.identity);
@@ -76,7 +103,7 @@ public class GameManager : MonoBehaviour
 
     private void OnBoardClicked(Position boardPosition)
     {
-        if (_gameState.MakeMove(boardPosition, out MoveInfo moveInfo))
+        if (_gameState.BoardState.MakeMove(boardPosition, out MoveInfo moveInfo))
         {
             StartCoroutine(OnMoveMade(moveInfo));
         }
@@ -87,6 +114,8 @@ public class GameManager : MonoBehaviour
         HideLegalMoves();
         yield return ShowMove(moveInfo);
         yield return ShowTurnOutcome(moveInfo);
+        //yield return ShowCounting();
+        ShowScore();
         ShowLegalMoves();
     }
 
@@ -110,9 +139,9 @@ public class GameManager : MonoBehaviour
 
     private void AddStartDiscs()
     {
-        foreach (var boardPosition in _gameState.OccupiedPositions())
+        foreach (var boardPosition in _gameState.BoardState.OccupiedPositions())
         {
-            Player player = _gameState.Board[boardPosition.Row, boardPosition.Column];
+            Player player = _gameState.BoardState.Board[boardPosition.Row, boardPosition.Column];
             SpawnDisc(_discPrefabs[player], boardPosition);
         }
     }
@@ -142,6 +171,7 @@ public class GameManager : MonoBehaviour
     private IEnumerator ShowGameOver(Player winner)
     {
         _uiManager.SetTopText("Neither Player Can Move");
+        StartCoroutine(_uiManager.HideCurrentScoreText());
         yield return _uiManager.AnimateTopText();
         yield return _uiManager.ShowScoreText();
         yield return new WaitForSeconds(0.5f);
@@ -171,9 +201,9 @@ public class GameManager : MonoBehaviour
         int black = 0;
         int white = 0;
 
-        foreach (var position in _gameState.OccupiedPositions())
+        foreach (var position in _gameState.BoardState.OccupiedPositions())
         {
-            var player = _gameState.Board[position.Row, position.Column];
+            var player = _gameState.BoardState.Board[position.Row, position.Column];
 
             if (player == Player.Black)
             {
@@ -197,8 +227,35 @@ public class GameManager : MonoBehaviour
         SceneManager.LoadScene(activeScene.name);
     }
 
+    public IEnumerator StartGame()
+    {
+        switch (_uiManager.GetPlayerSide())
+        {
+            case "White": _gameState.CurrentPlayer = Player.White; break;
+            case "Black": _gameState.CurrentPlayer = Player.Black; break;
+        };
+        yield return _uiManager.HideStartScreen();
+        AddStartDiscs();
+        ShowLegalMoves();
+        _uiManager.SetPlayerText(_gameState.CurrentPlayer);
+        _uiManager.ShowTopText();
+        ShowScore();
+        StartCoroutine(_uiManager.ShowCurrentScoreText());
+    }
+
+    public void ShowScore()
+    {
+        _uiManager.SetBlackScoreText(_gameState.BoardState.DiscCount[Player.Black]);
+        _uiManager.SetWhiteScoreText(_gameState.BoardState.DiscCount[Player.White]);
+    }
+
     public void OnPlayAgainClicked()
     {
         StartCoroutine(RestartGame());
+    }
+
+    public void OnPlayClicked()
+    {
+        StartCoroutine(StartGame());
     }
 }

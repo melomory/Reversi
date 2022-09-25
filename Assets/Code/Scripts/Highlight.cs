@@ -23,7 +23,7 @@ public class Highlight : MonoBehaviour
 
     private void OnMouseExit()
     {
-        _material.color -= _normalColor;
+        _material.color = _normalColor;
     }
 
     private void OnDestroy()

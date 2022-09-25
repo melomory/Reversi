@@ -4,6 +4,7 @@ using UnityEngine;
 using TMPro;
 using UnityEngine.UI;
 using System;
+using System.Linq;
 
 public class UIManager : MonoBehaviour
 {
@@ -24,6 +25,12 @@ public class UIManager : MonoBehaviour
 
     [SerializeField]
     private RectTransform _playAgainButton;
+
+    [SerializeField]
+    private ToggleGroup _whiteBlackRadioOptions;
+
+    [SerializeField]
+    private RectTransform _playButton;
 
     public void SetPlayerText(Player currentPlayer)
     {
@@ -144,6 +151,65 @@ public class UIManager : MonoBehaviour
         StartCoroutine(ScaleDown(_blackScoreText.rectTransform));
         StartCoroutine(ScaleDown(_whiteScoreText.rectTransform));
         StartCoroutine(ScaleDown(_playAgainButton));
+        yield return new WaitForSeconds(0.5f);
+        yield return HideOverlay();
+    }
+
+    public IEnumerator ShowCurrentScoreText()
+    {
+        _blackScoreText.rectTransform.LeanMove(new Vector3(-600, 300, 0), 0.5f);
+        _whiteScoreText.rectTransform.LeanMove(new Vector3(600, 300, 0), 0.5f);
+        yield return ScaleUp(_blackScoreText.rectTransform);
+        yield return ScaleUp(_whiteScoreText.rectTransform);
+        yield return new WaitForSeconds(0.5f);
+    }
+
+    public IEnumerator HideCurrentScoreText()
+    {
+        _blackScoreText.rectTransform.LeanMove(new Vector3(-150, 475, 0), 0.5f);
+        _whiteScoreText.rectTransform.LeanMove(new Vector3(150, 475, 0), 0.5f);
+        yield return ScaleDown(_blackScoreText.rectTransform);
+        yield return ScaleDown(_whiteScoreText.rectTransform);
+        yield return new WaitForSeconds(0.5f);
+    }
+
+    public void ShowStartOverlay()
+    {
+        _blackOverlay.gameObject.SetActive(true);
+        _blackOverlay.color = new Color(0, 0, 0, 0.8f);
+    }
+
+    public void ShowStartDialog()
+    {
+        _whiteBlackRadioOptions.gameObject.SetActive(true);
+        _playButton.gameObject.SetActive(true);
+    }
+
+    public void HideStartDialog()
+    {
+        _whiteBlackRadioOptions.gameObject.SetActive(false);
+        _playButton.gameObject.SetActive(false);
+    }
+
+    public void ShowTopText()
+    {
+        _topText.gameObject.SetActive(true);
+    }
+
+    public void ShowStartScreen()
+    {
+        ShowStartOverlay();
+        ShowStartDialog();
+    }
+
+    public string GetPlayerSide()
+    {
+        return _whiteBlackRadioOptions.ActiveToggles().FirstOrDefault().GetComponentInChildren<Text>().text;
+    }
+
+    public IEnumerator HideStartScreen()
+    {
+        HideStartDialog();
         yield return new WaitForSeconds(0.5f);
         yield return HideOverlay();
     }
